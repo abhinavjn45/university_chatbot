@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     api_rate_limit: str = "10/minute"
     port: int = 8000
     host: str = "127.0.0.1"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), ".env"),

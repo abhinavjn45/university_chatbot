@@ -95,6 +95,15 @@ def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None)
         
     sql_clean = sql_query.strip().lower()
     
+    # Block comments which can be used to bypass filtering or inject commands
+    if '--' in sql_clean or '/*' in sql_clean or '*/' in sql_clean or '#' in sql_clean:
+        return False, "Security Validation Failed: SQL comments (-- or /* or #) are not allowed in queries."
+        
+    # Block multiple statements (semicolon check)
+    sql_stripped = sql_clean.rstrip(';')
+    if ';' in sql_stripped:
+        return False, "Security Validation Failed: Multiple SQL statements are not allowed."
+    
     if not (sql_clean.startswith("select") or sql_clean.startswith("with")):
         return False, "Unauthorized SQL operation. Only SELECT or WITH queries are allowed."
         
@@ -102,7 +111,7 @@ def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None)
         r'\bdrop\b', r'\bdelete\b', r'\bupdate\b', r'\binsert\b', 
         r'\balter\b', r'\btruncate\b', r'\breplace\b', r'\bcreate\b', 
         r'\bgrant\b', r'\brevoke\b', r'\bexec\b', r'\bexecute\b',
-        r'\bload_file\b', r'\boutfile\b', r'\bdumpfile\b'
+        r'\bload_file\b', r'\boutfile\b', r'\bdumpfile\b', r'\bunion\b'
     ]
     
     for kw in forbidden_keywords:

@@ -128,11 +128,22 @@ def execute_query_node(state: AgentState) -> Dict[str, Any]:
                 }
     except Exception as e:
         execution_time = int((time.time() - start_time) * 1000)
+        raw_error = str(e)
+        role = state.get("user_role")
+        
+        # Mask detailed database schemas/errors for Students & Faculty (Information Disclosure protection)
+        if role in ["Super Admin", "Department Admin"]:
+            display_error = raw_error
+            logged_error = raw_error
+        else:
+            display_error = "An unexpected error occurred while executing the query. Please contact the administrator."
+            logged_error = "Database execution failed (detailed error hidden for security)."
+            
         return {
             "query_result": [],
             "rows_returned": 0,
-            "sql_error": str(e),
-            "final_response": f"Database Execution Error: {e}",
+            "sql_error": logged_error,
+            "final_response": f"Database Execution Error: {display_error}",
             "execution_time_ms": execution_time
         }
 
