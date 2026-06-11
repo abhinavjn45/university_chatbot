@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#0b0c15] text-[#e2e8f0] font-sans antialiased selection:bg-brand-500 selection:text-white;
+  }
+
+  /* Custom Scrollbar Styles */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(11, 12, 21, 0.8);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(109, 144, 255, 0.15);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(109, 144, 255, 0.35);
+  }
+}
+
+/* Premium Glassmorphic Styles */
+.glass-panel {
+  background: rgba(18, 20, 38, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  background: rgba(22, 25, 47, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(22, 25, 47, 0.7);
+  border-color: rgba(109, 144, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.input-glass {
+  background: rgba(13, 14, 27, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.input-glass:focus {
+  border-color: rgba(109, 144, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(109, 144, 255, 0.15);
+}
+
+/* Glowing Elements */
+.glow-brand {
+  box-shadow: 0 0 20px rgba(109, 144, 255, 0.15);
+}
+
+.glow-brand-active {
+  box-shadow: 0 0 25px rgba(109, 144, 255, 0.3);
+}
+
+/* Custom Gradients */
+.grad-brand {
+  background: linear-gradient(135deg, #4d6eff 0%, #2d3eae 100%);
+}
+
+.grad-text-brand {
+  background: linear-gradient(135deg, #c2d4ff 0%, #6d90ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Shimmer Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #161726 25%, #2a2c42 50%, #161726 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
