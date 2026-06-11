@@ -1,4 +1,6 @@
 import re
+import csv
+import io
 from openai import OpenAI
 from backend.config import settings
 from backend.rules import BUSINESS_RULES, DOMAIN_SCHEMAS, ROLE_RESTRICTIONS
@@ -148,31 +150,75 @@ def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None)
             
     return True, ""
 
+def dict_list_to_csv(results: list) -> str:
+    """
+    Converts a list of dictionaries to a compact CSV string, reducing token overhead.
+    """
+    if not results:
+        return ""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=results[0].keys())
+    writer.writeheader()
+    writer.writerows(results)
+    return output.getvalue().strip()
+
 def format_response(query: str, sql: str, results: list, role: str) -> str:
     """
     Translates raw database rows into a clear, conversational human-readable answer.
-    Avoids LLM calls entirely for empty results to save 100% of formatting token cost.
+    Optimizes tokens through CSV compression, result truncation, and local programmatic shortcuts.
     """
     if not results or len(results) == 0:
         return "No matching records found in the database."
 
+    # 1. Local Bypass: Count and Average shortcuts
+    # If result is 1 row and 1 column, and is a count or average, format it locally to save 100% of LLM cost.
+    if len(results) == 1 and len(results[0]) == 1:
+        col_name = list(results[0].keys())[0]
+        val = results[0][col_name]
+        col_lower = col_name.lower()
+        if "count" in col_lower or col_lower.startswith("cnt"):
+            return f"I found a total of {val} matching records."
+        elif "avg" in col_lower or "average" in col_lower:
+            try:
+                # Format average values nicely
+                formatted_val = f"{float(val):.2f}" if isinstance(val, (int, float)) or (isinstance(val, str) and val.replace('.', '', 1).replace('-', '', 1).isdigit()) else val
+                return f"The calculated average is {formatted_val}."
+            except Exception:
+                pass
+
     client = get_groq_client()
     if not client:
-        return f"Database Results: {results}. (Configure GROQ_API_KEY for summaries)."
+        return f"Query returned {len(results)} rows. (Configure GROQ_API_KEY for conversational summary)."
 
-    # Ultra-short formatter prompt
-    prompt = f"""User: {query}
-SQL: {sql}
-Results: {results}
-Synthesize a brief, friendly, conversational summary of the results."""
+    # 2. Adaptive Truncation & CSV Compression
+    total_count = len(results)
+    is_truncated = total_count > 3
+    sample_results = results[:3] if is_truncated else results
+    
+    csv_data = dict_list_to_csv(sample_results)
+    
+    # High-density summary prompt instructing LLM to avoid drawing assumptions about unseen rows
+    prompt = f"""User Question: {query}
+SQL Query executed: {sql}
+Total Database Rows: {total_count}
+Results (CSV format, showing first 3 of {total_count} rows):
+{csv_data}
+""" if is_truncated else f"""User Question: {query}
+SQL Query executed: {sql}
+Total Database Rows: {total_count}
+Results (CSV format):
+{csv_data}
+"""
+
+    prompt += "\nSynthesize a brief, friendly, conversational summary of the results in 1-2 short sentences. DO NOT output a markdown table or duplicate the data list, as the frontend will render the complete table. Simply tell the user what was found."
 
     try:
         response = client.chat.completions.create(
             model=settings.groq_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=150
+            max_tokens=100
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Database Results: {results}. (Error formatting response: {e})"
+        return f"I processed the query and found {total_count} rows. (Summary generation failed: {e})"

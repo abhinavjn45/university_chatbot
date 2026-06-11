@@ -6,6 +6,155 @@ import {
   BookOpen, Calendar, DollarSign
 } from 'lucide-react';
 
+const QueryResultTable = ({ data }) => {
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState(null);
+  const rowsPerPage = 5;
+
+  const columns = Object.keys(data[0]);
+
+  // Handle sorting
+  const sortedData = React.useMemo(() => {
+    let sortableItems = [...data];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        if (aVal < bVal) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aVal > bVal) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [data, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Handle pagination
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const currentRows = sortedData.slice(indexOfFirstRow, indexOfLastRow);
+  const totalPages = Math.ceil(data.length / rowsPerPage);
+
+  // Export CSV function
+  const downloadCSV = () => {
+    const csvRows = [];
+    csvRows.push(columns.join(',')); // Add headers
+
+    for (const row of data) {
+      const values = columns.map(col => {
+        const val = row[col];
+        const stringVal = val === null || val === undefined ? '' : String(val);
+        // Escape quotes
+        return `"${stringVal.replace(/"/g, '""')}"`;
+      });
+      csvRows.push(values.join(','));
+    }
+
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `query_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="mt-3 border border-dark-800 rounded-xl bg-[#0b0c16]/80 overflow-hidden w-full max-w-full">
+      {/* Table Title / Export Actions */}
+      <div className="flex items-center justify-between px-3 py-2 bg-dark-900/40 border-b border-dark-800">
+        <span className="text-[10px] font-bold text-dark-400 uppercase tracking-wider">
+          Query Results ({data.length} records)
+        </span>
+        <button 
+          onClick={downloadCSV}
+          className="flex items-center gap-1 text-[10px] text-brand-300 hover:text-white bg-brand-950/40 hover:bg-brand-900/50 border border-brand-900/30 px-2 py-1 rounded transition-colors"
+        >
+          <FileText size={10} /> Export CSV
+        </button>
+      </div>
+
+      {/* Main Table Container */}
+      <div className="overflow-x-auto max-w-full">
+        <table className="w-full text-left text-xs border-collapse font-sans">
+          <thead>
+            <tr className="border-b border-dark-800 text-dark-400 font-bold bg-[#0d0e1b]/60">
+              {columns.map((col) => (
+                <th 
+                  key={col} 
+                  onClick={() => requestSort(col)}
+                  className="p-2.5 whitespace-nowrap cursor-pointer hover:text-white select-none transition-colors animate-fade-in"
+                >
+                  <div className="flex items-center gap-1">
+                    {col}
+                    {sortConfig?.key === col ? (
+                      sortConfig.direction === 'ascending' ? ' ▲' : ' ▼'
+                    ) : (
+                      <span className="text-dark-600 text-[8px]"> ▼</span>
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dark-900 font-mono text-[11px] text-[#c2d4ff]">
+            {currentRows.map((row, idx) => (
+              <tr key={idx} className="hover:bg-dark-900/20 transition-colors">
+                {columns.map((col) => (
+                  <td key={col} className="p-2.5 max-w-[200px] truncate" title={String(row[col] ?? '')}>
+                    {row[col] === null || row[col] === undefined ? '-' : String(row[col])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-3 py-2 border-t border-dark-800 bg-[#0d0e1b]/40 text-[10px]">
+          <span className="text-dark-500 font-sans">
+            Page {currentPage} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-2 py-1 border border-dark-800 rounded bg-dark-950/50 text-dark-400 hover:text-white hover:border-dark-700 disabled:opacity-40 disabled:hover:text-dark-400 disabled:hover:border-dark-800 transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-2 py-1 border border-dark-800 rounded bg-dark-950/50 text-dark-400 hover:text-white hover:border-dark-700 disabled:opacity-40 disabled:hover:text-dark-400 disabled:hover:border-dark-800 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BACKEND_URL = 'http://127.0.0.1:8000';
 
 function App() {
@@ -202,7 +351,8 @@ function App() {
           cache_hit: data.cache_hit,
           domain: data.domain,
           sql_valid: data.sql_valid,
-          sql_error: data.sql_error
+          sql_error: data.sql_error,
+          query_result: data.query_result
         }
       };
 
@@ -528,6 +678,10 @@ function App() {
                     <div className={`p-4 rounded-2xl text-sm leading-relaxed border ${msg.sender === 'user' ? 'bg-gradient-to-r from-brand-600 to-brand-700 text-white border-brand-500 rounded-tr-none' : 'bg-dark-900/50 text-[#e2e8f0] border-dark-800 rounded-tl-none shadow-lg'}`}>
                       {msg.text}
                     </div>
+
+                    {msg.sender === 'assistant' && msg.metadata && msg.metadata.query_result && msg.metadata.query_result.length > 0 && (
+                      <QueryResultTable data={msg.metadata.query_result} />
+                    )}
 
                     {msg.sender === 'assistant' && msg.metadata && (
                       <div className="w-full">

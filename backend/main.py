@@ -58,6 +58,7 @@ class ChatResponse(BaseModel):
     domain: str
     sql_valid: bool = True
     sql_error: Optional[str] = None
+    query_result: Optional[List[Dict[str, Any]]] = None
 
 @app.get("/health")
 def health_check():
@@ -171,7 +172,8 @@ def chat_endpoint(request: Request, req: ChatRequest):
         cache_hit=final_state.get("cache_hit", False),
         domain=final_state.get("domain", "academics"),
         sql_valid=final_state.get("sql_valid", True),
-        sql_error=final_state.get("sql_error")
+        sql_error=final_state.get("sql_error"),
+        query_result=final_state.get("query_result")
     )
 
 @app.get("/conversation/{session_id}")

@@ -102,7 +102,13 @@ def execute_query_node(state: AgentState) -> Dict[str, Any]:
             result = conn.execute(text(sql))
             if result.returns_rows:
                 columns = list(result.keys())
-                rows = [dict(zip(columns, row)) for row in result.fetchall()]
+                raw_rows = result.fetchall()
+                total_returned = len(raw_rows)
+                
+                # Proactively clamp database rows to 100 to prevent Out of Memory failures
+                clamped_rows = raw_rows[:100]
+                rows = [dict(zip(columns, row)) for row in clamped_rows]
+                
                 # Clean Decimals & Dates for JSON response serialization
                 for row in rows:
                     for k, v in row.items():
@@ -116,7 +122,7 @@ def execute_query_node(state: AgentState) -> Dict[str, Any]:
                 execution_time = int((time.time() - start_time) * 1000)
                 return {
                     "query_result": rows,
-                    "rows_returned": len(rows),
+                    "rows_returned": total_returned, # Return actual size
                     "execution_time_ms": execution_time
                 }
             else:
