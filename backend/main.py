@@ -47,6 +47,8 @@ class ChatRequest(BaseModel):
     message: str
     role: str
     student_id: Optional[int] = None
+    faculty_id: Optional[int] = None
+    user_email: Optional[str] = None
     session_id: str = "default"
 
 class ChatResponse(BaseModel):
@@ -85,7 +87,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             "role": "Student",
             "student_id": result.student_id,
             "name": f"{result.first_name} {result.last_name}",
-            "enrollment_no": result.enrollment_no
+            "enrollment_no": result.enrollment_no,
+            "email": email
         }
     elif role == "Faculty":
         query = text("SELECT faculty_id, first_name, last_name FROM faculty WHERE email = :email")
@@ -96,14 +99,16 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             "success": True,
             "role": "Faculty",
             "name": f"{result.first_name} {result.last_name}",
-            "faculty_id": result.faculty_id
+            "faculty_id": result.faculty_id,
+            "email": email
         }
     elif role in ["Department Admin", "Super Admin"]:
         # Standard administrative demo accounts
         return {
             "success": True,
             "role": role,
-            "name": f"Demo {role}"
+            "name": f"Demo {role}",
+            "email": email
         }
     else:
         raise HTTPException(status_code=400, detail="Invalid ERP role specified.")
@@ -131,6 +136,8 @@ def chat_endpoint(request: Request, req: ChatRequest):
         "question": req.message,
         "user_role": req.role,
         "student_id": req.student_id,
+        "faculty_id": req.faculty_id,
+        "user_email": req.user_email,
         "chat_history": chat_history,
         "domain": None,
         "generated_sql": None,

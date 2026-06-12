@@ -12,6 +12,8 @@ class AgentState(TypedDict):
     question: str
     user_role: str
     student_id: Optional[int]
+    faculty_id: Optional[int]
+    user_email: Optional[str]
     chat_history: List[Dict[str, Any]]
     domain: Optional[str]
     generated_sql: Optional[str]
@@ -32,8 +34,9 @@ def classify_domain_node(state: AgentState) -> Dict[str, Any]:
 # Node 2: Check Cache
 def check_cache_node(state: AgentState) -> Dict[str, Any]:
     # We only cache successful runs.
-    # Cache key is based on: role + student_id + question
-    cache_key = f"qcache:{state['user_role']}:{state.get('student_id')}:{state['question'].strip().lower()}"
+    # Cache key isolates cache per unique user using student_id/faculty_id/user_email to prevent collision.
+    user_id = state.get("student_id") or state.get("faculty_id") or state.get("user_email") or "anonymous"
+    cache_key = f"qcache:{state['user_role']}:{user_id}:{state['question'].strip().lower()}"
     cached_data = cache.cache_get(cache_key)
     
     if cached_data:
@@ -63,6 +66,8 @@ def generate_sql_node(state: AgentState) -> Dict[str, Any]:
         domain=state["domain"],
         role=state["user_role"],
         student_id=state.get("student_id"),
+        faculty_id=state.get("faculty_id"),
+        user_email=state.get("user_email"),
         chat_history=state.get("chat_history")
     )
     return {"generated_sql": sql}
@@ -76,7 +81,8 @@ def validate_sql_node(state: AgentState) -> Dict[str, Any]:
         sql_query=state["generated_sql"],
         role=state["user_role"],
         domain=state["domain"],
-        student_id=state.get("student_id")
+        student_id=state.get("student_id"),
+        faculty_id=state.get("faculty_id")
     )
     if not is_valid:
         return {
@@ -109,7 +115,7 @@ def execute_query_node(state: AgentState) -> Dict[str, Any]:
                 clamped_rows = raw_rows[:100]
                 rows = [dict(zip(columns, row)) for row in clamped_rows]
                 
-                # Clean Decimals & Dates for JSON response serialization
+                # Clean Decimals, Dates & Bytes for JSON response serialization
                 for row in rows:
                     for k, v in row.items():
                         import decimal
@@ -118,6 +124,12 @@ def execute_query_node(state: AgentState) -> Dict[str, Any]:
                             row[k] = float(v)
                         elif isinstance(v, (datetime.date, datetime.datetime)):
                             row[k] = v.isoformat()
+                        elif isinstance(v, bytes):
+                            try:
+                                row[k] = v.decode('utf-8')
+                            except Exception:
+                                import base64
+                                row[k] = base64.b64encode(v).decode('utf-8')
                             
                 execution_time = int((time.time() - start_time) * 1000)
                 return {
@@ -169,7 +181,8 @@ def generate_response_node(state: AgentState) -> Dict[str, Any]:
     )
     
     # Save to Cache
-    cache_key = f"qcache:{state['user_role']}:{state.get('student_id')}:{state['question'].strip().lower()}"
+    user_id = state.get("student_id") or state.get("faculty_id") or state.get("user_email") or "anonymous"
+    cache_key = f"qcache:{state['user_role']}:{user_id}:{state['question'].strip().lower()}"
     try:
         import json
         cache_data = {

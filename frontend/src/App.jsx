@@ -216,11 +216,11 @@ function App() {
   // Pre-configured email lists for ease of demo
   const demoEmails = {
     'Student': [
-      { email: 'rahul.sharma@student.edu', desc: 'Rahul Sharma (MCA, Top CGPA: 9.2)' },
-      { email: 'amit.sen@student.edu', desc: 'Amit Sen (MCA, Detained: <65% attendance)' },
-      { email: 'sneha.reddy@student.edu', desc: 'Sneha Reddy (B.Tech CSE, Top CGPA: 9.5)' },
-      { email: 'rohan.malhotra@student.edu', desc: 'Rohan Malhotra (B.Tech CSE, Fee Defaulter)' },
-      { email: 'manish.gupta@student.edu', desc: 'Manish Gupta (MBA, Detained & Defaulter)' }
+      { email: 'rahul.sharma1@student.edu', desc: 'Rahul Sharma (MCA, Top CGPA: 9.2)' },
+      { email: 'amit.sen3@student.edu', desc: 'Amit Sen (MCA, Detained: <65% attendance)' },
+      { email: 'sneha.reddy4@student.edu', desc: 'Sneha Reddy (B.Tech CSE, Top CGPA: 9.5)' },
+      { email: 'rohan.malhotra5@student.edu', desc: 'Rohan Malhotra (B.Tech CSE, Fee Defaulter)' },
+      { email: 'manish.gupta8@student.edu', desc: 'Manish Gupta (MBA, Detained & Defaulter)' }
     ],
     'Faculty': [
       { email: 'rajesh.kumar@university.edu', desc: 'Prof. Rajesh Kumar (MCA, Teaches DS/DBMS)' },
@@ -330,6 +330,8 @@ function App() {
           message: query,
           role: currentUser.role,
           student_id: currentUser.student_id || null,
+          faculty_id: currentUser.faculty_id || null,
+          user_email: currentUser.email || null,
           session_id: sessionId
         })
       });

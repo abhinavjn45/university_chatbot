@@ -37,7 +37,15 @@ def classify_domain(query: str) -> str:
         
     return "academics"
 
-def generate_sql(query: str, domain: str, role: str, student_id: int = None, chat_history: list = None) -> str:
+def generate_sql(
+    query: str, 
+    domain: str, 
+    role: str, 
+    student_id: int = None, 
+    faculty_id: int = None, 
+    user_email: str = None, 
+    chat_history: list = None
+) -> str:
     """
     Generates a secure MySQL query for the user request. Uses compressed prompts to save tokens.
     """
@@ -46,12 +54,22 @@ def generate_sql(query: str, domain: str, role: str, student_id: int = None, cha
         return "ERROR: Groq API Key not configured. Please add your GROQ_API_KEY to backend/.env."
 
     schema = DOMAIN_SCHEMAS.get(domain, DOMAIN_SCHEMAS["academics"])
+    if role == "Faculty":
+        # Append the workloads link table so the LLM knows how subjects map to faculty members in other domains
+        schema += "\nfaculty_workload(workload_id PK, faculty_id FK references faculty(faculty_id), subject_id FK, hours_per_week)\n"
+
     role_restriction = ROLE_RESTRICTIONS.get(role, ROLE_RESTRICTIONS["Student"])
     
-    # Conditional student context injection
-    student_context = ""
+    # Conditional user context injection
+    user_context = ""
     if role == "Student" and student_id is not None:
-        student_context = f"\nUser is Student (id={student_id}). Filter tables by student_id={student_id}."
+        user_context = f"\nUser is Student (student_id={student_id}). Filter queries by student_id = {student_id}."
+    elif role == "Faculty" and faculty_id is not None:
+        user_context = (
+            f"\nUser is Faculty Member (faculty_id={faculty_id}, email='{user_email}'). "
+            f"Restricted access: you may only query attendance, grades, or workloads for subjects taught by this faculty member. "
+            f"Ensure you join with `faculty_workload` to filter by `faculty_workload.faculty_id = {faculty_id}`."
+        )
 
     # Condensed chat history
     history_str = ""
@@ -64,7 +82,7 @@ def generate_sql(query: str, domain: str, role: str, student_id: int = None, cha
     prompt = f"""Generate a MySQL SELECT query. Output raw SQL only (no markdown codeblocks or quotes).
 Schema: {schema.strip()}
 Rules: {BUSINESS_RULES.strip()}
-Role Limits: {role_restriction.strip()}{student_context}{history_str}
+Role Limits: {role_restriction.strip()}{user_context}{history_str}
 Question: {query}
 SQL:"""
 
@@ -84,7 +102,16 @@ SQL:"""
     except Exception as e:
         return f"ERROR: Failed to generate SQL via Groq: {e}"
 
-def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None) -> tuple[bool, str]:
+def strip_sql_literals(sql: str) -> str:
+    """
+    Removes all string literals (single quoted or double quoted) from the SQL query.
+    This allows security validation to run on the query structure and keywords,
+    without false positives from string contents.
+    """
+    pattern = r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\""
+    return re.sub(pattern, "''", sql)
+
+def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None, faculty_id: int = None) -> tuple[bool, str]:
     """
     Validates that the SQL query is read-only, free of injection, and satisfies 
     strict programmatic Role-Based Access Control (RBAC) rules.
@@ -96,17 +123,18 @@ def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None)
         return False, sql_query
         
     sql_clean = sql_query.strip().lower()
+    sql_stripped_literals = strip_sql_literals(sql_clean)
     
     # Block comments which can be used to bypass filtering or inject commands
-    if '--' in sql_clean or '/*' in sql_clean or '*/' in sql_clean or '#' in sql_clean:
+    if '--' in sql_stripped_literals or '/*' in sql_stripped_literals or '*/' in sql_stripped_literals or '#' in sql_stripped_literals:
         return False, "Security Validation Failed: SQL comments (-- or /* or #) are not allowed in queries."
         
     # Block multiple statements (semicolon check)
-    sql_stripped = sql_clean.rstrip(';')
-    if ';' in sql_stripped:
+    sql_stripped_semicolon = sql_stripped_literals.rstrip(';')
+    if ';' in sql_stripped_semicolon:
         return False, "Security Validation Failed: Multiple SQL statements are not allowed."
     
-    if not (sql_clean.startswith("select") or sql_clean.startswith("with")):
+    if not (sql_stripped_literals.startswith("select") or sql_stripped_literals.startswith("with")):
         return False, "Unauthorized SQL operation. Only SELECT or WITH queries are allowed."
         
     forbidden_keywords = [
@@ -117,35 +145,85 @@ def validate_sql(sql_query: str, role: str, domain: str, student_id: int = None)
     ]
     
     for kw in forbidden_keywords:
-        if re.search(kw, sql_clean):
+        if re.search(kw, sql_stripped_literals):
             clean_kw = kw.replace(r'\b', '').strip()
             return False, f"Security Validation Failed: Forbidden SQL command '{clean_kw}' detected."
             
     # Programmatic Role-Based Access Control (RBAC) Checks
     if role == "Faculty":
         # Block access to fees domain or fee tables
-        if domain == "fees" or any(tbl in sql_clean for tbl in ["fee_structure", "fee_payments", "scholarships"]):
+        if domain == "fees" or any(tbl in sql_stripped_literals for tbl in ["fee_structure", "fee_payments", "scholarships"]):
             return False, "Access Denied: Faculty members are not authorized to view financial or fee records."
             
+        # Enforce that Faculty members can only query attendance, results, workloads for subjects they teach
+        sensitive_faculty_tables = ["attendance", "attendance_logs", "results", "faculty_workload"]
+        if any(tbl in sql_stripped_literals for tbl in sensitive_faculty_tables):
+            if faculty_id is not None:
+                # 1. Enforce that there is at least one active filter matching the faculty_id
+                id_pattern = r'\b(?:[a-zA-Z0-9_]+\.)?faculty_id\s*=\s*' + str(faculty_id) + r'\b'
+                in_pattern = r'\b(?:[a-zA-Z0-9_]+\.)?faculty_id\s+in\s*\(\s*' + str(faculty_id) + r'\s*\)'
+                reverse_pattern = r'\b' + str(faculty_id) + r'\s*=\s*(?:[a-zA-Z0-9_]+\.)?faculty_id\b'
+                
+                has_valid_filter = (
+                    re.search(id_pattern, sql_stripped_literals) or 
+                    re.search(in_pattern, sql_stripped_literals) or
+                    re.search(reverse_pattern, sql_stripped_literals)
+                )
+                
+                if not has_valid_filter:
+                    return False, f"Access Denied: You are only authorized to query academic or attendance records for subjects associated with your Faculty ID ({faculty_id})."
+                
+                # 2. Block if faculty_id is compared to any other numerical constant in the query
+                eq_captures = re.findall(r'\b(?:[a-zA-Z0-9_]+\.)?faculty_id\s*=\s*(\d+)\b', sql_stripped_literals)
+                in_captures = re.findall(r'\b(?:[a-zA-Z0-9_]+\.)?faculty_id\s+in\s*\(\s*(\d+)\s*\)', sql_stripped_literals)
+                rev_captures = re.findall(r'\b(\d+)\s*=\s*(?:[a-zA-Z0-9_]+\.)?faculty_id\b', sql_stripped_literals)
+                
+                all_captures = eq_captures + in_captures + rev_captures
+                for num_str in all_captures:
+                    if int(num_str) != faculty_id:
+                        return False, f"Access Denied: Query contains restricted filter matching a different Faculty ID: {num_str}."
+            else:
+                return False, "Access Denied: Faculty ID is required to query sensitive class records."
+            
     elif role == "Student":
-        # Block access to faculty workload/departments or system logs
-        if domain in ["faculty", "administration"] or any(tbl in sql_clean for tbl in ["faculty_workload", "audit_logs"]):
-            return False, "Access Denied: Students are not authorized to access faculty workloads or system logs."
+        # Block access to faculty/admin tables and system logs
+        forbidden_student_tables = ["faculty", "faculty_workload", "departments", "admissions", "notifications", "audit_logs"]
+        if any(tbl in sql_stripped_literals for tbl in forbidden_student_tables):
+            return False, "Access Denied: Students are not authorized to access faculty, administrative, department tables, or system logs."
             
         # Ensure students only query records matching their own student_id
         sensitive_tables = ["students", "results", "attendance", "fee_payments", "scholarships", "attendance_logs"]
-        if any(tbl in sql_clean for tbl in sensitive_tables):
+        if any(tbl in sql_stripped_literals for tbl in sensitive_tables):
             if student_id is not None:
-                id_pattern = f"student_id\s*=\s*{student_id}"
-                in_pattern = f"student_id\s+in\s*\(\s*{student_id}\s*\)"
-                if not (re.search(id_pattern, sql_clean) or re.search(in_pattern, sql_clean)):
+                # 1. Enforce that there is at least one active filter matching the student_id
+                id_pattern = r'\b(?:[a-zA-Z0-9_]+\.)?student_id\s*=\s*' + str(student_id) + r'\b'
+                in_pattern = r'\b(?:[a-zA-Z0-9_]+\.)?student_id\s+in\s*\(\s*' + str(student_id) + r'\s*\)'
+                reverse_pattern = r'\b' + str(student_id) + r'\s*=\s*(?:[a-zA-Z0-9_]+\.)?student_id\b'
+                
+                has_valid_filter = (
+                    re.search(id_pattern, sql_stripped_literals) or 
+                    re.search(in_pattern, sql_stripped_literals) or
+                    re.search(reverse_pattern, sql_stripped_literals)
+                )
+                
+                if not has_valid_filter:
                     return False, f"Access Denied: You are only authorized to access records matching your own Student ID ({student_id})."
+                
+                # 2. Block if student_id is compared to any other numerical constant in the query
+                eq_captures = re.findall(r'\b(?:[a-zA-Z0-9_]+\.)?student_id\s*=\s*(\d+)\b', sql_stripped_literals)
+                in_captures = re.findall(r'\b(?:[a-zA-Z0-9_]+\.)?student_id\s+in\s*\(\s*(\d+)\s*\)', sql_stripped_literals)
+                rev_captures = re.findall(r'\b(\d+)\s*=\s*(?:[a-zA-Z0-9_]+\.)?student_id\b', sql_stripped_literals)
+                
+                all_captures = eq_captures + in_captures + rev_captures
+                for num_str in all_captures:
+                    if int(num_str) != student_id:
+                        return False, f"Access Denied: Query contains restricted filter matching a different Student ID: {num_str}."
             else:
                 return False, "Access Denied: Student ID is required to query personal records."
                 
     elif role == "Department Admin":
         # Block access to system logs
-        if "audit_logs" in sql_clean:
+        if "audit_logs" in sql_stripped_literals:
             return False, "Access Denied: Department Admins are not authorized to view system audit logs."
             
     return True, ""
@@ -175,6 +253,9 @@ def format_response(query: str, sql: str, results: list, role: str) -> str:
     if len(results) == 1 and len(results[0]) == 1:
         col_name = list(results[0].keys())[0]
         val = results[0][col_name]
+        if val is None:
+            return "No matching records found in the database."
+            
         col_lower = col_name.lower()
         if "count" in col_lower or col_lower.startswith("cnt"):
             return f"I found a total of {val} matching records."
