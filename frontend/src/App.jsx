@@ -478,28 +478,6 @@ function App() {
 
         {/* Top Navbar Actions */}
         <div className="flex items-center gap-4">
-          <div className="flex rounded-lg border border-dark-800 p-0.5 bg-dark-950/50">
-            <button 
-              onClick={() => setActiveTab('chat')}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === 'chat' ? 'grad-brand text-white' : 'text-dark-400 hover:text-white'}`}
-            >
-              Chat Room
-            </button>
-            <button 
-              onClick={() => setActiveTab('metrics')}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === 'metrics' ? 'grad-brand text-white' : 'text-dark-400 hover:text-white'}`}
-            >
-              Metrics Dashboard
-            </button>
-          </div>
-
-          <button 
-            onClick={() => setShowConfigHelp(!showConfigHelp)}
-            className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-white transition-colors bg-brand-950/40 border border-brand-900/50 px-3 py-1.5 rounded-lg"
-          >
-            <HelpCircle size={14} />
-            Setup Tutorial
-          </button>
         </div>
       </header>
 
