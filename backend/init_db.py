@@ -306,106 +306,111 @@ def run_init():
     cursor.executemany("INSERT INTO subjects (subject_name, subject_code, course_id) VALUES (%s, %s, %s)", subjects)
 
     # Students
-    # Rahul Sharma (MCA, cgpa 9.2)
-    # Priya Patel (MCA, cgpa 8.7)
-    # Amit Sen (MCA, cgpa 6.8, attendance below 75% - detained)
-    # Sneha Reddy (B.Tech, cgpa 9.5)
-    # Rohan Malhotra (B.Tech, cgpa 7.1, fee defaulter)
-    # Vikram Singh (B.Tech, graduated, cgpa 8.1)
-    # Divya Nair (MBA, cgpa 8.9)
-    # Manish Gupta (MBA, cgpa 5.4, fee defaulter and detained)
-    students = [
-        ("Rahul", "Sharma", "rahul.sharma@student.edu", "MCA202401", "Active", 9.20, 1),
-        ("Priya", "Patel", "priya.patel@student.edu", "MCA202402", "Active", 8.70, 1),
-        ("Amit", "Sen", "amit.sen@student.edu", "MCA202403", "Active", 6.80, 1),
-        ("Sneha", "Reddy", "sneha.reddy@student.edu", "CS202201", "Active", 9.50, 2),
-        ("Rohan", "Malhotra", "rohan.malhotra@student.edu", "CS202202", "Active", 7.10, 2),
-        ("Vikram", "Singh", "vikram.singh@student.edu", "CS202203", "Graduated", 8.10, 2),
-        ("Divya", "Nair", "divya.nair@student.edu", "MBA202501", "Active", 8.90, 3),
-        ("Manish", "Gupta", "manish.gupta@student.edu", "MBA202502", "Active", 5.40, 3),
-        ("Arjun", "Das", "arjun.das@student.edu", "MCA202404", "Active", 7.80, 1),
-        ("Neha", "Kapoor", "neha.kapoor@student.edu", "CS202204", "Active", 8.45, 2)
-    ]
+    # Dynamic generation of 40 students with realistic emails, enrollment numbers, status, and course mappings
+    first_names = ["Rahul", "Priya", "Amit", "Sneha", "Rohan", "Vikram", "Divya", "Manish", "Arjun", "Neha", 
+                   "Aarav", "Ananya", "Kabir", "Diya", "Vivaan", "Ishaan", "Aanya", "Sai", "Aadhya", "Krishna", 
+                   "Aditya", "Meera", "Ishita", "Aryan", "Pranav", "Siddharth", "Kiara", "Rhea", "Avani", "Rudra", 
+                   "Reyansh", "Anika", "Vihaan", "Dhruv", "Zara", "Amina", "Saisha", "Yash", "Karan", "Simran"]
+    
+    last_names = ["Sharma", "Patel", "Sen", "Reddy", "Malhotra", "Singh", "Nair", "Gupta", "Das", "Kapoor", 
+                  "Kumar", "Joshi", "Mehta", "Iyer", "Rao", "Pillai", "Choudhury", "Bose", "Chatterjee", "Mukherjee", 
+                  "Verma", "Prasad", "Mishra", "Pandey", "Trivedi", "Desai", "Kulkarni", "Patil", "Bhat", "Shenoy"]
+
+    students = []
+    # Build list of 40 students
+    for i in range(1, 41):
+        fn = first_names[(i - 1) % len(first_names)]
+        ln = last_names[(i - 1) % len(last_names)]
+        email = f"{fn.lower()}.{ln.lower()}{i}@student.edu"
+        
+        course_id = ((i - 1) % 3) + 1  # 1: MCA, 2: BTECH-CSE, 3: MBA
+        prefix = "MCA" if course_id == 1 else ("CS" if course_id == 2 else "MBA")
+        year = 2024 if course_id == 1 else (2022 if course_id == 2 else 2025)
+        enrollment_no = f"{prefix}{year}{i:02d}"
+        
+        # Student 6 is Graduated, others Active
+        status = "Graduated" if i == 6 else "Active"
+        cgpa = round(5.5 + (i * 0.13) % 4.3, 2)
+        if cgpa > 10.0:
+            cgpa = 10.00
+            
+        students.append((fn, ln, email, enrollment_no, status, cgpa, course_id))
+
     cursor.executemany("INSERT INTO students (first_name, last_name, email, enrollment_no, status, cgpa, course_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", students)
 
-    # Results (For MCA 1st Trimester subjects and other sem results)
-    results = [
-        # Student 1: Rahul Sharma
-        (1, 1, 95, 100, "O", 1), # DS
-        (1, 2, 90, 100, "A+", 1), # DBMS
-        # Student 2: Priya Patel
-        (2, 1, 88, 100, "A", 1),
-        (2, 2, 85, 100, "A", 1),
-        # Student 3: Amit Sen
-        (3, 1, 65, 100, "B", 1),
-        (3, 2, 70, 100, "B+", 1),
-        # Student 4: Sneha Reddy
-        (4, 5, 98, 100, "O", 3), # DAA
-        (4, 6, 94, 100, "O", 3), # OS
-        # Student 5: Rohan Malhotra
-        (5, 5, 72, 100, "B+", 3),
-        (5, 6, 70, 100, "B+", 3),
-        # Student 7: Divya Nair
-        (7, 7, 91, 100, "A+", 4), # FM
-        (7, 8, 87, 100, "A", 4), # MA
-        # Student 8: Manish Gupta
-        (8, 7, 52, 100, "C", 4),
-        (8, 8, 56, 100, "C", 4)
+    # Fetch inserted student IDs to keep relations consistent
+    cursor.execute("SELECT student_id, course_id FROM students")
+    db_students = cursor.fetchall()  # list of (student_id, course_id)
+
+    # Dynamic Results Generation
+    # Loop through all students and insert results for active semesters
+    # MCA (course 1): semesters 1 and 2 (subjects 1, 2, 3, 4)
+    # BTech (course 2): semester 3 (subjects 5, 6)
+    # MBA (course 3): semester 4 (subjects 7, 8)
+    results = []
+    grades = [
+        (90, "O"), (80, "A+"), (70, "A"), (60, "B+"), (50, "B"), (40, "C"), (0, "F")
     ]
+    for student_id, course_id in db_students:
+        if course_id == 1:
+            subject_ids = [1, 2] # Data Structures, DBMS (Trimester 1)
+            semester_id = 1
+        elif course_id == 2:
+            subject_ids = [5, 6] # DAA, OS (Semester 3)
+            semester_id = 3
+        else:
+            subject_ids = [7, 8] # FM, MA (Semester 4)
+            semester_id = 4
+            
+        for sub_id in subject_ids:
+            # Deterministic marks based on student_id
+            marks = int(50 + (student_id * 7 + sub_id * 13) % 49)
+            grade = "F"
+            for threshold, g in grades:
+                if marks >= threshold:
+                    grade = g
+                    break
+            results.append((student_id, sub_id, marks, 100, grade, semester_id))
+            
     cursor.executemany("INSERT INTO results (student_id, subject_id, marks_obtained, max_marks, grade, semester_id) VALUES (%s, %s, %s, %s, %s, %s)", results)
 
-    # Attendance (Calculated percentages: attended, total, percent)
-    # Rahul Sharma
-    # Priya Patel
-    # Amit Sen (detained, attendance < 75%)
-    # Sneha Reddy
-    # Rohan Malhotra
-    # Divya Nair
-    # Manish Gupta (detained, attendance < 75%)
-    attendance = [
-        (1, 1, 38, 40, 95.00), # Rahul Sharma, DS
-        (1, 2, 36, 40, 90.00), # Rahul Sharma, DBMS
-        (1, 3, 29, 30, 96.67), # Rahul Sharma, Python
-        (2, 1, 34, 40, 85.00), # Priya, DS
-        (2, 2, 35, 40, 87.50), # Priya, DBMS
-        (2, 3, 27, 30, 90.00), # Priya, Python
-        (3, 1, 24, 40, 60.00), # Amit Sen, DS (Detained in DS)
-        (3, 2, 32, 40, 80.00), # Amit Sen, DBMS
-        (3, 3, 18, 30, 60.00), # Amit Sen, Python (Detained in Python)
-        (4, 5, 48, 50, 96.00), # Sneha, DAA
-        (4, 6, 47, 50, 94.00), # Sneha, OS
-        (5, 5, 39, 50, 78.00), # Rohan, DAA
-        (5, 6, 40, 50, 80.00), # Rohan, OS
-        (7, 7, 32, 35, 91.43), # Divya, FM
-        (7, 8, 31, 35, 88.57), # Divya, MA
-        (8, 7, 20, 35, 57.14), # Manish, FM (Detained in FM)
-        (8, 8, 22, 35, 62.86)  # Manish, MA (Detained in MA)
-    ]
+    # Dynamic Attendance Generation
+    # Loop through students and create attendance records for their registered subjects
+    attendance = []
+    for student_id, course_id in db_students:
+        if course_id == 1:
+            subject_ids = [1, 2, 3] # DS, DBMS, Python (MCA)
+        elif course_id == 2:
+            subject_ids = [5, 6] # DAA, OS (BTech)
+        else:
+            subject_ids = [7, 8] # FM, MA (MBA)
+            
+        for sub_id in subject_ids:
+            total_classes = 40 if sub_id in [1, 2, 7, 8] else 50
+            # Some students have low attendance (Amit = id 3, Manish = id 8, etc.)
+            # Deterministic formula to distribute attendance percentages
+            factor = 0.55 if student_id in [3, 8, 15, 23, 31] else 0.78
+            classes_attended = int(total_classes * (factor + (student_id * 3 + sub_id * 7) % 20 / 100))
+            if classes_attended > total_classes:
+                classes_attended = total_classes
+            percentage = round((classes_attended / total_classes) * 100, 2)
+            attendance.append((student_id, sub_id, classes_attended, total_classes, percentage))
+            
     cursor.executemany("INSERT INTO attendance (student_id, subject_id, classes_attended, total_classes, percentage) VALUES (%s, %s, %s, %s, %s)", attendance)
 
-    # Attendance Logs (for recent dates to show records)
+    # Dynamic Attendance Logs (daily logs for the first 15 students over 10 days)
     log_date_base = datetime.date(2026, 6, 1)
     attendance_logs = []
-    for day in range(10):
-        current_date = log_date_base + datetime.timedelta(days=day)
-        # Weekends off
-        if current_date.weekday() >= 5:
-            continue
-        
-        # Student 1 present mostly
-        attendance_logs.append((1, 1, current_date, "Present"))
-        attendance_logs.append((1, 2, current_date, "Present"))
-        
-        # Student 3 absent mostly
-        status_s3 = "Present" if day % 3 == 0 else "Absent"
-        attendance_logs.append((3, 1, current_date, status_s3))
-        attendance_logs.append((3, 3, current_date, status_s3))
-
-        # Student 8 absent mostly
-        status_s8 = "Present" if day % 4 == 0 else "Absent"
-        attendance_logs.append((8, 7, current_date, status_s8))
-        attendance_logs.append((8, 8, current_date, status_s8))
-
+    for student_id, course_id in db_students[:15]: # log for first 15 students
+        sub_id = 1 if course_id == 1 else (5 if course_id == 2 else 7)
+        for day in range(10):
+            current_date = log_date_base + datetime.timedelta(days=day)
+            if current_date.weekday() >= 5:
+                continue
+            # Some absents
+            status = "Absent" if (student_id + day) % 7 == 0 else "Present"
+            attendance_logs.append((student_id, sub_id, current_date, status))
+            
     cursor.executemany("INSERT INTO attendance_logs (student_id, subject_id, date, status) VALUES (%s, %s, %s, %s)", attendance_logs)
 
     # Fee Structure
@@ -416,30 +421,38 @@ def run_init():
     ]
     cursor.executemany("INSERT INTO fee_structure (course_id, academic_year, total_amount) VALUES (%s, %s, %s)", fee_structures)
 
-    # Fee Payments
-    # Student 1: Rahul (Paid full)
-    # Student 2: Priya (Paid full)
-    # Student 3: Amit (Paid 100k, 20k pending)
-    # Student 4: Sneha (Paid full)
-    # Student 5: Rohan (Paid 100k, 80k pending - defaulter)
-    # Student 7: Divya (Paid full)
-    # Student 8: Manish (Paid 120k, 130k pending - defaulter)
-    fee_payments = [
-        (1, 120000.00, datetime.date(2025, 8, 10), 0.00),
-        (2, 120000.00, datetime.date(2025, 8, 12), 0.00),
-        (3, 100000.00, datetime.date(2025, 9, 1), 20000.00),
-        (4, 180000.00, datetime.date(2025, 7, 20), 0.00),
-        (5, 100000.00, datetime.date(2025, 8, 5), 80000.00),
-        (7, 250000.00, datetime.date(2025, 7, 15), 0.00),
-        (8, 120000.00, datetime.date(2025, 8, 25), 130000.00)
-    ]
+    # Dynamic Fee Payments & Scholarships
+    fee_payments = []
+    scholarships = []
+    for student_id, course_id in db_students:
+        expected = 120000.00 if course_id == 1 else (180000.00 if course_id == 2 else 250000.00)
+        
+        # Payment category
+        # Full payment: 70% of students
+        # Partial payment: 20% of students
+        # Unpaid/Defaulter: 10% of students
+        category = student_id % 10
+        if category in [0, 1, 2, 3, 4, 5, 6]:
+            paid = expected
+            pending = 0.00
+        elif category in [7, 8]:
+            paid = expected - 40000.00
+            pending = 40000.00
+        else:
+            paid = 0.00
+            pending = expected
+            
+        if paid > 0:
+            fee_payments.append((student_id, paid, datetime.date(2025, 8, 10 + (student_id % 15)), pending))
+            
+        # Scholarships for high CGPA students (top 15% of CGPAs)
+        # We can dynamically give scholarships
+        if student_id % 7 == 0:
+            amt = 30000.00 if student_id % 2 == 0 else 50000.00
+            type_str = "Merit-based Academic Scholarship" if student_id % 2 == 0 else "Dean's List Scholarship"
+            scholarships.append((student_id, amt, type_str))
+            
     cursor.executemany("INSERT INTO fee_payments (student_id, amount_paid, payment_date, pending_amount) VALUES (%s, %s, %s, %s)", fee_payments)
-
-    # Scholarships
-    scholarships = [
-        (1, 30000.00, "Merit-based Academic Scholarship"),
-        (4, 50000.00, "Super topper scholarship")
-    ]
     cursor.executemany("INSERT INTO scholarships (student_id, amount, type) VALUES (%s, %s, %s)", scholarships)
 
     # Faculty Workload
@@ -455,15 +468,13 @@ def run_init():
     cursor.executemany("INSERT INTO faculty_workload (faculty_id, subject_id, hours_per_week) VALUES (%s, %s, %s)", faculty_workloads)
 
     # Admissions
-    admissions = [
-        (1, datetime.date(2024, 7, 15), "MCA Batch 2024"),
-        (2, datetime.date(2024, 7, 16), "MCA Batch 2024"),
-        (3, datetime.date(2024, 7, 20), "MCA Batch 2024"),
-        (4, datetime.date(2022, 8, 1), "BTech CSE Batch 2022"),
-        (5, datetime.date(2022, 8, 3), "BTech CSE Batch 2022"),
-        (7, datetime.date(2025, 7, 10), "MBA Batch 2025"),
-        (8, datetime.date(2025, 7, 12), "MBA Batch 2025")
-    ]
+    admissions = []
+    for student_id, course_id in db_students:
+        prefix = "MCA Batch 2024" if course_id == 1 else ("BTech CSE Batch 2022" if course_id == 2 else "MBA Batch 2025")
+        year = 2024 if course_id == 1 else (2022 if course_id == 2 else 2025)
+        admission_date = datetime.date(year, 7, 10 + (student_id % 15))
+        admissions.append((student_id, admission_date, prefix))
+        
     cursor.executemany("INSERT INTO admissions (student_id, admission_date, batch) VALUES (%s, %s, %s)", admissions)
 
     # Notifications
